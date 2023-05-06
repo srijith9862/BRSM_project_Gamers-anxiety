@@ -1,0 +1,180 @@
+---
+title: "BRSM_project"
+author: "Padakanti Srijith"
+date: "06/05/2023"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    toc_float: yes
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+
+```{r}
+data <- read.csv('cleanedDataset.csv')
+data["Gender"][data["Gender"] == "Male"] <- 0
+data["Gender"][data["Gender"] == "Female"] <- 1
+
+data$Gender <- as.integer(data$Gender)
+data["Gender"][is.na(data["Gender"])] <- 2
+#normalizing GAD and SPIN
+data["GAD_T_n"] <- sqrt(data["GAD_T"])
+data["SPIN_T_n"] <- sqrt(data["SPIN_T"])
+
+
+data["birth_res"][data["birth_res"] == "Same"] <- 0
+data["birth_res"][data["birth_res"] == "Different"] <- 1
+data$birth_res <- as.integer(data$birth_res)
+
+data["Work"][data["Work"] == "Student"] <- 0
+data["Work"][data["Work"] == "Unemployed"] <- 1
+data["Work"][data["Work"] == "Employed"] <- 2
+data$Work <- as.integer(data$Work)
+data["Work"][is.na(data["Work"])] <- 1
+
+data["Degree"][data["Degree"] == "Degree"] <- 1
+data["Degree"][data["Degree"] == "None"] <- 0
+data$Degree <- as.integer(data$Degree)
+data["Degree"][is.na(data["Degree"])] <- 0
+
+data["Platform"][data["Platform"] == "PC"] <- 0
+data["Platform"][data["Platform"] == "Console (PS, Xbox, ...)"] <- 1
+data["Platform"][data["Platform"] == "Smartphone / Tablet"] <- 2
+data$Platform <- as.integer(data$Platform)
+data["Platform"][is.na(data["Platform"])] <- 1
+
+data["does_stream"] = data["Game"]
+data["does_stream"][data["streams"] == 0] <- "No"
+data["does_stream"][data["streams"] != 0] <- "Yes"
+data["does_stream"][is.na(data["streams"])] <- "No"
+data["mean_hours"][is.na(data["mean_hours"])] <- "Below"
+data["Hours.streams"][is.na(data["Hours.streams"])] <- 10
+```
+
+
+
+```{r}
+library(ggplot2)
+ggplot(data, aes(x = GAD_T_n)) +
+  geom_histogram(binwidth = 1, fill = "lightblue", color = "black") +
+  labs(x = "GAD_T_n", y = "Frequency") +
+  ggtitle("Distribution of GAD_T Scores")
+
+
+ggplot(data, aes(x = SWL_T)) +
+  geom_histogram(binwidth = 1, fill = "lightblue", color = "black") +
+  labs(x = "SWL_T", y = "Frequency") +
+  ggtitle("Distribution of SWL_T Scores")
+
+ggplot(data, aes(x = SPIN_T_n)) +
+  geom_histogram(binwidth = 1, fill = "lightblue", color = "black") +
+  labs(x = "SPIN_T_n", y = "Frequency") +
+  ggtitle("Distribution of SPIN_T Scores")
+
+```
+```{r}
+library(corrplot)
+data_sub <- subset(data, select = c("Hours", "streams", "Gender", "Narcissism", "Age", "GAD_T", "SPIN_T", "SWL_T", "GAD_T_n", "SPIN_T_n", "Platform", "Work", "birth_res", "Degree"))
+corr_matrix <- cor(data_sub)
+str(data_sub)
+# Visualize the correlation matrix using a heatmap
+corrplot(corr_matrix, method = "color", 
+         tl.cex = 0.8, tl.srt = 45)
+```
+
+
+```{r}
+
+data$streams_group <- cut(data$streams, breaks=c(-1, 10, 20, 30, Inf), labels=c("0-10", "10-20", "20-30", "30+"))
+data["streams_group"][is.na(data["streams_group"])] <- "0-10"
+
+data$age_group <- cut(data$Age, breaks=c(17, 25, 35, 50, Inf), labels=c("18-25", "26-35", "36-50", "50+"))
+data["age_group"][is.na(data["age_group"])] <- "18-25"
+```
+
+```{r}
+# Gamers those who are unemployed and do not have a degree are less satisfied with life
+  # Dependent varaible: SWL, GAD, SPIN (continuous)
+  # Independent variable: Works (categorical), Degree (categorical) 
+# TEST: Factorial ANOVA
+
+# Load necessary library
+library(multcomp)
+
+# Perform ANOVA
+hypo.2.1 <- aov(SWL_T ~ interaction(Work , Degree), data)
+summary(hypo.2.1)
+
+# Perform pairwise t-tests with Bonferroni correction
+pairwise.t.test(data$SWL_T, interaction(data$Degree, data$Work), p.adjust.method = "bonferroni")
+hypo.2.2 <- aov(GAD_T_n ~ interaction(Work , Degree), data)
+summary(hypo.2.2)
+
+# Perform pairwise t-tests with Bonferroni correction
+pairwise.t.test(data$GAD_T_n, interaction(data$Degree, data$Work), p.adjust.method = "bonferroni")
+hypo.2.3 <- aov(SPIN_T_n ~ interaction(Work , Degree), data)
+summary(hypo.2.3)
+
+# Perform pairwise t-tests with Bonferroni correction
+pairwise.t.test(data$SPIN_T_n, interaction(data$Degree, data$Work), p.adjust.method = "bonferroni")
+```
+
+```{r}
+boxplot(SPIN_T ~ Degree, data = data,
+        main = "Degree w.r.t. SPIN_T",
+        col = c("#FFE0B2"),
+        xlab = "Degree",
+        ylab = "SPIN_T")
+
+boxplot(SPIN_T ~ Work, data = data,
+        main = "Work w.r.t. SPIN_T",
+        col = c("#FFE0B2"),
+        xlab = "Work",
+        ylab = "SPIN_T")
+```
+```{r}
+# Gamers who are young are more narcissistic than the rest
+# Dependent varaible: Narcissism (continuous)
+# Independent variable: age_group (categorical)
+# TEST: One-way Independent ANOVA
+data$age_group <- cut(data$Age, breaks=c(17, 25, 35, 50, Inf), labels=c("18-25", "26-35", "36-50", "50+"))
+
+model <- aov(Narcissism ~ age_group, data=data)
+anova(model)
+TukeyHSD(model)
+```
+
+```{r}
+# Narcissism to affect the GAD, SWL, SPIN scores in a positive way.
+# Dependent varaible: SWL, GAD, SPIN (continuous)
+# Independent variable: Narcissism (continuous)
+# TEST: pearson
+
+cor.test(data$SWL_T, data$Narcissism, method="pearson")
+cor.test(data$GAD_T_n, data$Narcissism, method="pearson")
+cor.test(data$SPIN_T_n, data$Narcissism, method="pearson")
+
+```
+```{r}
+# The GAD and SPIN scores to decrease with age, and the SWL to increase with age.
+# Dependent variable: SWL, GAD, SPIN (continuous)
+# Independent variable: age_group (categorical)
+# TEST: One Way ANOVA
+hypo.9 <- aov(SWL_T ~ age_group, data)
+summary(hypo.9)
+TukeyHSD(hypo.9)
+hypo.9 <- aov(GAD_T_n ~ age_group, data)
+summary(hypo.9)
+TukeyHSD(hypo.9)
+hypo.9 <- aov(SPIN_T_n ~ age_group, data)
+summary(hypo.9)
+TukeyHSD(hypo.9)
+```
+
+
+
+
